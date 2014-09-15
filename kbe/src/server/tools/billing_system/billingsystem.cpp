@@ -69,8 +69,8 @@ BillingSystem::~BillingSystem()
 		REQCREATE_MAP::iterator iter = reqCreateAccount_requests_.begin();
 		for(; iter != reqCreateAccount_requests_.end(); iter++)
 		{
-			WARNING_MSG(boost::format("BillingSystem::~BillingSystem(): Discarding %1%/%2% reqCreateAccount[%3%] tasks.\n") % 
-				++i % reqCreateAccount_requests_.size() % iter->second);
+			WARNING_MSG(fmt::format("BillingSystem::~BillingSystem(): Discarding {0}/{1} reqCreateAccount[{2:x}] tasks.\n", 
+				++i, reqCreateAccount_requests_.size(), (uintptr)iter->second));
 		}
 	}
 
@@ -80,8 +80,8 @@ BillingSystem::~BillingSystem()
 		REQLOGIN_MAP::iterator iter = reqAccountLogin_requests_.begin();
 		for(; iter != reqAccountLogin_requests_.end(); iter++)
 		{
-			WARNING_MSG(boost::format("BillingSystem::~BillingSystem(): Discarding %1%/%2% reqAccountLogin[%3%] tasks.\n") % 
-				++i % reqAccountLogin_requests_.size() % iter->second);
+			WARNING_MSG(fmt::format("BillingSystem::~BillingSystem(): Discarding {0}/{1} reqAccountLogin[{2:x}] tasks.\n", 
+				++i, reqAccountLogin_requests_.size(), (uintptr)iter->second));
 		}
 	}
 
@@ -163,7 +163,7 @@ void BillingSystem::handleMainTick()
 	
 	g_kbetime++;
 	threadPool_.onMainThreadTick();
-	getNetworkInterface().processAllChannelPackets(&BillingSystemInterface::messageHandlers);
+	networkInterface().processAllChannelPackets(&BillingSystemInterface::messageHandlers);
 }
 
 //-------------------------------------------------------------------------------------
@@ -177,14 +177,14 @@ bool BillingSystem::inInitialize()
 {
 	// 广播自己的地址给网上上的所有kbemachine
 	Componentbridge::getSingleton().getComponents().pHandler(this);
-	this->getMainDispatcher().addFrequentTask(&Componentbridge::getSingleton());
+	this->mainDispatcher().addFrequentTask(&Componentbridge::getSingleton());
 	return true;
 }
 
 //-------------------------------------------------------------------------------------
 bool BillingSystem::initializeEnd()
 {
-	mainProcessTimer_ = this->getMainDispatcher().addTimer(1000000 / g_kbeSrvConfig.gameUpdateHertz(), this,
+	mainProcessTimer_ = this->mainDispatcher().addTimer(1000000 / g_kbeSrvConfig.gameUpdateHertz(), this,
 							reinterpret_cast<void *>(TIMEOUT_TICK));
 
 	// 不做频道超时检查

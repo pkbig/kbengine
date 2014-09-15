@@ -110,8 +110,8 @@ public:
 
 	thread::ThreadPool& threadPool(){ return threadPool_; }
 
-	Mercury::EventDispatcher & getMainDispatcher()				{ return mainDispatcher_; }
-	Mercury::NetworkInterface & getNetworkInterface()			{ return networkInterface_; }
+	Mercury::EventDispatcher & mainDispatcher()				{ return mainDispatcher_; }
+	Mercury::NetworkInterface & networkInterface()			{ return networkInterface_; }
 
 	COMPONENT_ID componentID()const	{ return componentID_; }
 	COMPONENT_TYPE componentType()const	{ return componentType_; }
@@ -170,6 +170,11 @@ public:
 		某个app请求查看该app负载状态， 通常是console请求查看
 	*/
 	virtual void queryLoad(Mercury::Channel* pChannel);
+
+	/** 网络接口
+		请求关闭服务器
+	*/
+	void reqKillServer(Mercury::Channel* pChannel, MemoryStream& s);
 
 	/** 网络接口
 		客户端与服务端第一次建立交互, 客户端发送自己的版本号与通讯密钥等信息

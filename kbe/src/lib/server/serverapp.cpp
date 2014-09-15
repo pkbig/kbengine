@@ -158,7 +158,7 @@ bool ServerApp::initialize()
 	// 广播自己的地址给网上上的所有kbemachine
 	// 并且从kbemachine获取basappmgr和cellappmgr以及dbmgr地址
 	Componentbridge::getSingleton().getComponents().pHandler(this);
-	this->getMainDispatcher().addFrequentTask(&Componentbridge::getSingleton());
+	this->mainDispatcher().addFrequentTask(&Componentbridge::getSingleton());
 
 	bool ret = initializeEnd();
 
@@ -206,7 +206,7 @@ void ServerApp::queryWatcher(Mercury::Channel* pChannel, MemoryStream& s)
 	uint8 type = 0;
 	bundle << type;
 	bundle.append(readStreamPtr.get()->get());
-	bundle.send(getNetworkInterface(), pChannel);
+	bundle.send(networkInterface(), pChannel);
 
 	Mercury::Bundle bundle1;
 	bundle1.newMessage(msgHandler);
@@ -214,7 +214,7 @@ void ServerApp::queryWatcher(Mercury::Channel* pChannel, MemoryStream& s)
 	type = 1;
 	bundle1 << type;
 	bundle1.append(readStreamPtr1.get()->get());
-	bundle1.send(getNetworkInterface(), pChannel);
+	bundle1.send(networkInterface(), pChannel);
 }
 
 //-------------------------------------------------------------------------------------		
@@ -290,8 +290,8 @@ void ServerApp::onChannelDeregister(Mercury::Channel * pChannel)
 //-------------------------------------------------------------------------------------	
 void ServerApp::onChannelTimeOut(Mercury::Channel * pChannel)
 {
-	INFO_MSG(boost::format("ServerApp::onChannelTimeOut: "
-		"Channel %1% timed out.\n") % pChannel->c_str());
+	INFO_MSG(fmt::format("ServerApp::onChannelTimeOut: "
+		"Channel {0} timed out.\n", pChannel->c_str()));
 
 	networkInterface_.deregisterChannel(pChannel);
 	pChannel->destroy();
@@ -313,6 +313,10 @@ void ServerApp::onRemoveComponent(const Components::ComponentInfos* pInfos)
 	{
 		DebugHelper::getSingleton().unregisterMessagelog(MessagelogInterface::writeLog.msgID, pInfos->pIntAddr.get());
 	}
+	else if(pInfos->componentType == DBMGR_TYPE)
+	{
+		this->shutDown(0.f);
+	}
 }
 
 //-------------------------------------------------------------------------------------
@@ -323,19 +327,19 @@ void ServerApp::onRegisterNewApp(Mercury::Channel* pChannel, int32 uid, std::str
 	if(pChannel->isExternal())
 		return;
 
-	INFO_MSG(boost::format("ServerApp::onRegisterNewApp: uid:%1%, username:%2%, componentType:%3%, "
-			"componentID:%4%, globalorderID=%10%, grouporderID=%11%, intaddr:%5%, intport:%6%, extaddr:%7%, extport:%8%,  from %9%.\n") %
-			uid % 
-			username.c_str() % 
-			COMPONENT_NAME_EX((COMPONENT_TYPE)componentType) % 
-			componentID %
-			inet_ntoa((struct in_addr&)intaddr) %
-			ntohs(intport) %
-			(extaddr != 0 ? inet_ntoa((struct in_addr&)extaddr) : "nonsupport") %
-			ntohs(extport) %
-			pChannel->c_str() %
-			((int32)globalorderID) % 
-			((int32)grouporderID));
+	INFO_MSG(fmt::format("ServerApp::onRegisterNewApp: uid:{0}, username:{1}, componentType:{2}, "
+			"componentID:{3}, globalorderID={9}, grouporderID={10}, intaddr:{4}, intport:{5}, extaddr:{6}, extport:{7},  from {8}.\n",
+			uid,
+			username.c_str(),
+			COMPONENT_NAME_EX((COMPONENT_TYPE)componentType), 
+			componentID,
+			inet_ntoa((struct in_addr&)intaddr),
+			ntohs(intport),
+			(extaddr != 0 ? inet_ntoa((struct in_addr&)extaddr) : "nonsupport"),
+			ntohs(extport),
+			pChannel->c_str(),
+			((int32)globalorderID),
+			((int32)grouporderID)));
 
 	Components::ComponentInfos* cinfos = Componentbridge::getComponents().findComponent((
 		KBEngine::COMPONENT_TYPE)componentType, uid, componentID);
@@ -353,6 +357,32 @@ void ServerApp::onRegisterNewApp(Mercury::Channel* pChannel, int32 uid, std::str
 		KBE_ASSERT(cinfos->pIntAddr->ip == intaddr && cinfos->pIntAddr->port == intport);
 		cinfos->pChannel = pChannel;
 	}
+}
+
+//-------------------------------------------------------------------------------------
+void ServerApp::reqKillServer(Mercury::Channel* pChannel, MemoryStream& s)
+{
+	if(pChannel->isExternal())
+		return;
+
+	COMPONENT_ID componentID;
+	COMPONENT_TYPE componentType;
+	std::string username;
+	int32 uid;
+	std::string reason;
+
+	s >> componentID >> componentType >> username >> uid >> reason;
+
+	INFO_MSG(boost::format("ServerApp::reqKillServer: requester(uid:%1%, username:%2%, componentType:%3%, "
+				"componentID:%4%, reason:%5%, from %6%)\n") %
+				uid % 
+				username % 
+				COMPONENT_NAME_EX((COMPONENT_TYPE)componentType) % 
+				componentID %
+				reason %
+				pChannel->c_str());
+
+	CRITICAL_MSG("The application was killed!\n");
 }
 
 //-------------------------------------------------------------------------------------
@@ -393,7 +423,7 @@ void ServerApp::onAppActiveTick(Mercury::Channel* pChannel, COMPONENT_TYPE compo
 void ServerApp::reqClose(Mercury::Channel* pChannel)
 {
 	DEBUG_MSG(boost::format("ServerApp::reqClose: %1%\n") % pChannel->c_str());
-	// this->getNetworkInterface().deregisterChannel(pChannel);
+	// this->networkInterface().deregisterChannel(pChannel);
 	// pChannel->destroy();
 }
 
@@ -414,7 +444,7 @@ void ServerApp::lookApp(Mercury::Channel* pChannel)
 	int8 istate = int8(state);
 	(*pBundle) << istate;
 
-	(*pBundle).send(getNetworkInterface(), pChannel);
+	(*pBundle).send(networkInterface(), pChannel);
 
 	Mercury::Bundle::ObjPool().reclaimObject(pBundle);
 }
@@ -428,7 +458,7 @@ void ServerApp::reqCloseServer(Mercury::Channel* pChannel, MemoryStream& s)
 	
 	bool success = true;
 	(*pBundle) << success;
-	(*pBundle).send(getNetworkInterface(), pChannel);
+	(*pBundle).send(networkInterface(), pChannel);
 
 	Mercury::Bundle::ObjPool().reclaimObject(pBundle);
 
@@ -515,13 +545,13 @@ void ServerApp::startProfile_(Mercury::Channel* pChannel, std::string profileNam
 	switch(profileType)
 	{
 	case 1:	// cprofile
-		new CProfileHandler(this->getNetworkInterface(), timelen, profileName, pChannel->addr());
+		new CProfileHandler(this->networkInterface(), timelen, profileName, pChannel->addr());
 		break;
 	case 2:	// eventprofile
-		new EventProfileHandler(this->getNetworkInterface(), timelen, profileName, pChannel->addr());
+		new EventProfileHandler(this->networkInterface(), timelen, profileName, pChannel->addr());
 		break;
 	case 3:	// mercuryprofile
-		new MercuryProfileHandler(this->getNetworkInterface(), timelen, profileName, pChannel->addr());
+		new MercuryProfileHandler(this->networkInterface(), timelen, profileName, pChannel->addr());
 		break;
 	default:
 		ERROR_MSG(boost::format("ServerApp::startProfile_: type(%1%:%2%) not support!\n") % 

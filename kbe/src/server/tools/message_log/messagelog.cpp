@@ -55,11 +55,11 @@ bool Messagelog::run()
 {
 	bool ret = true;
 
-	while(!this->getMainDispatcher().isBreakProcessing())
+	while(!this->mainDispatcher().isBreakProcessing())
 	{
 		threadPool_.onMainThreadTick();
-		this->getMainDispatcher().processOnce(false);
-		getNetworkInterface().processAllChannelPackets(&MessagelogInterface::messageHandlers);
+		this->mainDispatcher().processOnce(false);
+		networkInterface().processAllChannelPackets(&MessagelogInterface::messageHandlers);
 		KBEngine::sleep(10);
 	};
 
@@ -172,8 +172,8 @@ void Messagelog::registerLogWatcher(Mercury::Channel* pChannel, KBEngine::Memory
 
 	pLogwatcher->addr(pChannel->addr());
 
-	INFO_MSG(boost::format("Messagelog::registerLogWatcher: addr=%1% is successfully!\n") %
-		pChannel->addr().c_str());
+	INFO_MSG(fmt::format("Messagelog::registerLogWatcher: addr={0} is successfully!\n",
+		pChannel->addr().c_str()));
 }
 
 //-------------------------------------------------------------------------------------

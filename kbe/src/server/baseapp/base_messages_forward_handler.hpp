@@ -18,47 +18,35 @@ You should have received a copy of the GNU Lesser General Public License
 along with KBEngine.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef KBENGINE_MD5_HPP
-#define KBENGINE_MD5_HPP
+#ifndef KBE_BASE_MESSAGES_FORWARD_HANDLER_HPP
+#define KBE_BASE_MESSAGES_FORWARD_HANDLER_HPP
 
-#include "openssl/md5.h"
-#include <string>
+#include "helper/debug_helper.hpp"
+#include "cstdkbe/cstdkbe.hpp"
 
-namespace KBEngine
-{
+namespace KBEngine{
 
-/**
- *	openssl md5µÄ·â×°
- */
-class KBE_MD5
+class Base;
+class BaseMessagesForwardHandler : public Task
 {
 public:
-	KBE_MD5();
-	KBE_MD5(const void * data, int numBytes);
-	~KBE_MD5();
-
-	void append(const void * data, int numBytes);
-	const unsigned char* getDigest();
-	std::string getDigestStr();
-
-	void clear();
+	BaseMessagesForwardHandler(Base* pBase);
+	~BaseMessagesForwardHandler();
 	
-	void final();
+	bool process();
 
-	bool operator==( const KBE_MD5 & other ) const;
-	bool operator!=( const KBE_MD5 & other ) const
-		{ return !(*this == other); }
+	void pushMessages(Mercury::Bundle* pBundle);
 
-	bool operator<( const KBE_MD5 & other ) const;
-
-	static std::string getDigest(const void * data, int numBytes);
+	void startForward(){ startForward_ = true; }
+	void stopForward(){ startForward_ = false; }
 private:
-	MD5_CTX state_;
-	unsigned char bytes_[16];
-	bool isFinal_;
+	Base* pBase_;
+	bool completed_;
+	std::vector<Mercury::Bundle*> bufferedSendToCellappMessages_;
+	bool startForward_;
 };
 
 
 }
 
-#endif // KBENGINE_MD5_HPP
+#endif // KBE_BASE_MESSAGES_FORWARD_HANDLER_HPP

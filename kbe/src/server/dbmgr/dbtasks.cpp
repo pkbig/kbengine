@@ -73,10 +73,10 @@ DBTask::~DBTask()
 //-------------------------------------------------------------------------------------
 bool DBTask::send(Mercury::Bundle& bundle)
 {
-	Mercury::Channel* pChannel = Dbmgr::getSingleton().getNetworkInterface().findChannel(addr_);
+	Mercury::Channel* pChannel = Dbmgr::getSingleton().networkInterface().findChannel(addr_);
 	
 	if(pChannel){
-		bundle.send(Dbmgr::getSingleton().getNetworkInterface(), pChannel);
+		bundle.send(Dbmgr::getSingleton().networkInterface(), pChannel);
 	}
 	else{
 		return false;
@@ -240,7 +240,7 @@ thread::TPTask::TPTaskState DBTaskExecuteRawDatabaseCommandByEntity::presentMain
 		}
 		else
 		{
-			(*pBundle).send(Dbmgr::getSingleton().getNetworkInterface(), cinfos->pChannel);
+			(*pBundle).send(Dbmgr::getSingleton().networkInterface(), cinfos->pChannel);
 		}
 	}
 	else
@@ -283,7 +283,7 @@ thread::TPTask::TPTaskState DBTaskExecuteRawDatabaseCommand::presentMainThread()
 
 	if(cinfos && cinfos->pChannel)
 	{
-		(*pBundle).send(Dbmgr::getSingleton().getNetworkInterface(), cinfos->pChannel);
+		(*pBundle).send(Dbmgr::getSingleton().networkInterface(), cinfos->pChannel);
 	}
 	else
 	{
@@ -358,7 +358,7 @@ bool DBTaskWriteEntity::db_thread_process()
 thread::TPTask::TPTaskState DBTaskWriteEntity::presentMainThread()
 {
 	ScriptDefModule* pModule = EntityDef::findScriptModule(sid_);
-	DEBUG_MSG(boost::format("Dbmgr::writeEntity: %1%(%2%).\n") % pModule->getName() % entityDBID_);
+	DEBUG_MSG(fmt::format("Dbmgr::writeEntity: {0}({1}).\n", pModule->getName(), entityDBID_));
 
 	// 返回写entity的结果， 成功或者失败
 
@@ -369,7 +369,7 @@ thread::TPTask::TPTaskState DBTaskWriteEntity::presentMainThread()
 
 	if(!this->send((*pBundle)))
 	{
-		ERROR_MSG(boost::format("DBTaskWriteEntity::presentMainThread: channel(%1%) not found.\n") % addr_.c_str());
+		ERROR_MSG(fmt::format("DBTaskWriteEntity::presentMainThread: channel({0}) not found.\n", addr_.c_str()));
 	}
 
 	Mercury::Bundle::ObjPool().reclaimObject(pBundle);
@@ -629,16 +629,7 @@ thread::TPTask::TPTaskState DBTaskCreateAccount::presentMainThread()
 std::string genmail_code(const std::string& str)
 {
 	std::string datas = KBEngine::StringConv::val2str(KBEngine::genUUID64());
-
-	unsigned char md[16];
-	MD5((unsigned char *)str.c_str(), str.length(), md);
-
-	char tmp[3] = {'\0'};
-	for (int i = 0; i < 16; i++)
-	{
-		sprintf(tmp,"%2.2x", md[i]);
-		datas += tmp;
-	}
+	datas += KBE_MD5::getDigest(str.data(), str.length());
 
 	srand(getSystemTime());
 	datas += KBEngine::StringConv::val2str(rand());
@@ -716,17 +707,7 @@ bool DBTaskCreateMailAccount::db_thread_process()
 			pdbi_->getstrerror() % pdbi_->lastquery());
 	}
 
-	unsigned char md[16];
-	MD5((unsigned char *)password_.c_str(), password_.length(), md);
-
-	char tmp[3]={'\0'}, md5password[33] = {'\0'};
-	for (int i = 0; i < 16; i++)
-	{
-		sprintf(tmp,"%2.2X", md[i]);
-		strcat(md5password, tmp);
-	}
-
-	password_ = md5password;
+	password_ = KBE_MD5::getDigest(password_.data(), password_.length());
 
 	success_ = pTable1->logAccount(pdbi_, (int8)KBEEmailVerificationTable::V_TYPE_CREATEACCOUNT, 
 		registerName_, password_, getdatas_);
@@ -1078,31 +1059,12 @@ bool DBTaskAccountNewPassword::db_thread_process()
 	if(info.dbid == 0 || info.flags != ACCOUNT_FLAG_NORMAL)
 		return false;
 
-	unsigned char md[16];
-	MD5((unsigned char *)oldpassword_.c_str(), oldpassword_.length(), md);
-
-	char tmp[3]={'\0'}, md5password[33] = {'\0'};
-	for (int i = 0; i < 16; i++)
-	{
-		sprintf(tmp,"%2.2X", md[i]);
-		strcat(md5password, tmp);
-	}
-
-	if(kbe_stricmp(info.password.c_str(), md5password) != 0)
+	if(kbe_stricmp(info.password.c_str(), KBE_MD5::getDigest(oldpassword_.data(), oldpassword_.length()).c_str()) != 0)
 	{
 		return false;
 	}
 
-	MD5((unsigned char *)newpassword_.c_str(), newpassword_.length(), md);
-	md5password[0] = '\0';
-
-	for (int i = 0; i < 16; i++)
-	{
-		sprintf(tmp,"%2.2X", md[i]);
-		strcat(md5password, tmp);
-	}
-
-	success_ = pTable->updatePassword(pdbi_, accountName_, md5password);
+	success_ = pTable->updatePassword(pdbi_, accountName_, KBE_MD5::getDigest(newpassword_.data(), newpassword_.length()));
 	return false;
 }
 
@@ -1194,17 +1156,7 @@ bool DBTaskQueryAccount::db_thread_process()
 			return false;
 		}
 
-		unsigned char md[16];
-		MD5((unsigned char *)password_.c_str(), password_.length(), md);
-
-		char tmp[3]={'\0'}, md5password[33] = {'\0'};
-		for (int i = 0; i < 16; i++)
-		{
-			sprintf(tmp,"%2.2X", md[i]);
-			strcat(md5password, tmp);
-		}
-
-		if(kbe_stricmp(info.password.c_str(), md5password) != 0)
+		if(kbe_stricmp(info.password.c_str(), KBE_MD5::getDigest(password_.data(), password_.length()).c_str()) != 0)
 		{
 			error_ = "password is error";
 			return false;
@@ -1439,17 +1391,7 @@ bool DBTaskAccountLogin::db_thread_process()
 
 			if(kbe_stricmp(g_kbeSrvConfig.billingSystemAccountType(), "normal") == 0)
 			{
-				unsigned char md[16];
-				MD5((unsigned char *)password_.c_str(), password_.length(), md);
-
-				char tmp[3]={'\0'}, md5password[33] = {'\0'};
-				for (int i = 0; i < 16; i++)
-				{
-					sprintf(tmp,"%2.2X", md[i]);
-					strcat(md5password, tmp);
-				}
-
-				info.password = md5password;
+				info.password = KBE_MD5::getDigest(password_.data(), password_.length());
 			}
 		}
 		else
@@ -1465,17 +1407,7 @@ bool DBTaskAccountLogin::db_thread_process()
 
 	if(kbe_stricmp(g_kbeSrvConfig.billingSystemAccountType(), "normal") == 0)
 	{
-		unsigned char md[16];
-		MD5((unsigned char *)password_.c_str(), password_.length(), md);
-
-		char tmp[3]={'\0'}, md5password[33] = {'\0'};
-		for (int i = 0; i < 16; i++)
-		{
-			sprintf(tmp,"%2.2X", md[i]);
-			strcat(md5password, tmp);
-		}
-
-		if(kbe_stricmp(info.password.c_str(), md5password) != 0)
+		if(kbe_stricmp(info.password.c_str(), KBE_MD5::getDigest(password_.data(), password_.length()).c_str()) != 0)
 		{
 			success_ = false;
 			return false;
@@ -1507,15 +1439,15 @@ bool DBTaskAccountLogin::db_thread_process()
 //-------------------------------------------------------------------------------------
 thread::TPTask::TPTaskState DBTaskAccountLogin::presentMainThread()
 {
-	DEBUG_MSG(boost::format("Dbmgr::onAccountLogin:loginName=%1%, accountName=%2%, success=%3%, componentID=%4%, dbid=%5%, flags=%6%, deadline=%7%.\n") % 
-		loginName_ %
-		accountName_ %
-		success_ %
-		componentID_ %
-		dbid_ %
-		flags_ %
+	DEBUG_MSG(fmt::format("Dbmgr::onAccountLogin:loginName{0}, accountName={1}, success={2}, componentID={3}, dbid={4}, flags={5}, deadline={6}.\n", 
+		loginName_,
+		accountName_,
+		success_,
+		componentID_,
+		dbid_,
+		flags_,
 		deadline_
-		);
+		));
 
 	// 一个用户登录， 构造一个数据库查询指令并加入到执行队列， 执行完毕将结果返回给loginapp
 	Mercury::Bundle* pBundle = Mercury::Bundle::ObjPool().createObject();
